@@ -13,8 +13,6 @@ export interface AppEnv {
   shutdownTimeoutMs: number;
 }
 
-export const APP_ENV = Symbol('APP_ENV');
-
 function numberFrom(
   env: NodeJS.ProcessEnv,
   key: string,

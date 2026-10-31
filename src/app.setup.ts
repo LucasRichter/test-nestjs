@@ -1,4 +1,9 @@
-import { ValidationPipe, type INestApplication } from '@nestjs/common';
+import {
+  ClassSerializerInterceptor,
+  ValidationPipe,
+  type INestApplication,
+} from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 
 export function configureApp(app: INestApplication): void {
   app.useGlobalPipes(
@@ -8,5 +13,6 @@ export function configureApp(app: INestApplication): void {
       transform: true,
     }),
   );
+  app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
   app.enableShutdownHooks();
 }

@@ -1,17 +1,23 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { APP_FILTER } from '@nestjs/core';
 import { MongooseModule } from '@nestjs/mongoose';
-import { APP_ENV, type AppEnv } from './config/app-env.js';
-import { AppConfigModule } from './config/app-config.module.js';
+import { MongoExceptionFilter } from './common/mongo-exception.filter.js';
+import { AppConfig, AppConfigModule } from './config/app-config.module.js';
 import { EventsModule } from './events/events.module.js';
 import { HealthModule } from './health/health.module.js';
 
 @Module({
   imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+      ignoreEnvFile: true,
+    }),
     AppConfigModule,
     MongooseModule.forRootAsync({
       imports: [AppConfigModule],
-      inject: [APP_ENV],
-      useFactory: (env: AppEnv) => ({
+      inject: [AppConfig],
+      useFactory: (env: AppConfig) => ({
         uri: env.mongodbUri,
         serverSelectionTimeoutMS: 30_000,
       }),
@@ -19,5 +25,6 @@ import { HealthModule } from './health/health.module.js';
     EventsModule,
     HealthModule,
   ],
+  providers: [{ provide: APP_FILTER, useClass: MongoExceptionFilter }],
 })
 export class AppModule {}

@@ -19,7 +19,6 @@ interface Timeline {
       previousEventId: string | null;
       stateHash: string;
     } | null;
-    effectApplied: boolean;
   }>;
 }
 
@@ -96,7 +95,6 @@ console.log(
         status: event.status,
         sequence: event.outcome?.sequence ?? null,
         previousEventId: event.outcome?.previousEventId ?? null,
-        effectApplied: event.effectApplied,
       })),
     },
     null,

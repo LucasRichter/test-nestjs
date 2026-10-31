@@ -328,7 +328,8 @@ describe('ingest service', () => {
     const event = await request(leaseApp.getHttpServer()).get(
       `/events/${response.body.id}`,
     );
-    expect(event.body.effectApplied).toBe(true);
+    expect(event.body.status).toBe('processed');
+    expect(event.body.effectApplied).toBeUndefined();
     expect(leased.calls).toHaveLength(1);
     await leaseApp.close();
   });
@@ -364,7 +365,9 @@ describe('ingest service', () => {
       `/events/${failed.body.id}`,
     );
     expect(blocked.body.status).toBe('pending');
-    expect(failedEvent.body.lastError).toBe('external unavailable');
+    expect(failedEvent.body.status).toBe('failed');
+    expect(failedEvent.body.lastError).toBeUndefined();
+    expect(failedEvent.body.attempt).toBeUndefined();
     external.failTypes.delete('boom');
   });
 });

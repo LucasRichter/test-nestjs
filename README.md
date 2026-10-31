@@ -48,7 +48,7 @@ What the service adds:
 - `status` — `pending`, `processing`, `processed`, or `failed`.
 - `outcome.sequence`, `outcome.previousEventId`, `outcome.stateHash` — position in that patient's chain. This is an observable fold, not a clinical calculation.
 
-Support fields: `receivedAt` and `eligibleAt` (the two-second reorder window), `lockToken` and `lockedUntil` (who owns the event), `effectApplied` (the external effect was already counted), `attempt` and `lastError`.
+The HTTP event includes `receivedAt`, the moment the service accepted it. `eligibleAt` (the reorder window), `lockToken` and `lockedUntil` (who owns the event), `effectApplied` (the external effect was already counted), `attempt`, and `lastError` stay on the document.
 
 Indexes: unique `idempotencyKey`; `{ patientId, ts }` for order; `{ status, eligibleAt, ts }` for the worker; a partial unique index on `patientId` where `status` is `processing`.
 
@@ -72,7 +72,7 @@ The smaller design stops at the grace window: a very late event stays stored and
 
 **The process can die in the middle of the call.** A claim stores `lockToken` and `lockedUntil`. Completion writes only if that token still matches. A dead worker's lock expires and the event returns to `pending`. On shutdown the process stops claiming, waits for in-flight work, then releases whatever it still holds. The external effect is recorded on the document before the slow call. A crash during the call does not count the effect twice. A crash in the tiny window before that write can repeat the call. A real external system would have to honor the same key. End-to-end exactly-once is not a promise this service can keep.
 
-**A failed event stays visible and blocks that patient.** After `MAX_ATTEMPTS` (default 5) the status is `failed` and `lastError` is readable. A later `ts` is not applied over the hole. Other patients continue. There is no manual replay endpoint.
+**A failed event stays visible and blocks that patient.** After `MAX_ATTEMPTS` (default 5) the status is `failed`. `lastError` stays on the document. A later `ts` is not applied over the hole. Other patients continue. There is no manual replay endpoint.
 
 **The service keeps accepting when the backlog grows.** Rejecting a clinical event is a form of loss if the sender does not retry. `GET /health` reports `pending`, the age of the oldest pending event, and turns `degraded` past `OLDEST_PENDING_DEGRADED_MS` (default 30 seconds). The alternative, not implemented, is `503` once lag is too high, so the sender retries later instead of filling the disk.
 

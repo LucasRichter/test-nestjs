@@ -1,42 +1,25 @@
-import {
-  Inject,
-  Injectable,
-  NotFoundException,
-  ServiceUnavailableException,
-  type OnModuleInit,
-} from '@nestjs/common';
-import { InjectConnection, InjectModel } from '@nestjs/mongoose';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import mongoose from 'mongoose';
-import { isDuplicateKey, isMongoUnavailable } from '../common/mongo-errors.js';
-import { APP_ENV, type AppEnv } from '../config/app-env.js';
+import { isDuplicateKey } from '../common/mongo-errors.js';
+import { AppConfig } from '../config/app-config.module.js';
 import type { CreateEventDto } from './dto/create-event.dto.js';
-import { toEventView, type EventView } from './event.presenter.js';
-import { buildIdempotencyKey, normalizeTimestamp } from './idempotency.js';
 import {
-  PatientEvent,
-  type PatientEventDocument,
-} from './schemas/event.schema.js';
-
-export interface AcceptedEvent {
-  id: string;
-  status: string;
-  duplicate: boolean;
-}
+  AcceptedEventDto,
+  EventViewDto,
+  PatientTimelineDto,
+} from './dto/event-response.dto.js';
+import { toAccepted, toEventView, toTimeline } from './event.presenter.js';
+import { buildIdempotencyKey, normalizeTimestamp } from './idempotency.js';
+import { EventsRepository } from './events.repository.js';
 
 @Injectable()
-export class EventsService implements OnModuleInit {
+export class EventsService {
   constructor(
-    @InjectModel(PatientEvent.name)
-    private readonly events: mongoose.Model<PatientEventDocument>,
-    @InjectConnection() private readonly connection: mongoose.Connection,
-    @Inject(APP_ENV) private readonly env: AppEnv,
+    private readonly events: EventsRepository,
+    private readonly env: AppConfig,
   ) {}
 
-  async onModuleInit(): Promise<void> {
-    await this.events.createIndexes();
-  }
-
-  async accept(dto: CreateEventDto): Promise<AcceptedEvent> {
+  async accept(dto: CreateEventDto): Promise<AcceptedEventDto> {
     const ts = new Date(normalizeTimestamp(dto.ts));
     const now = new Date();
     const document = {
@@ -57,39 +40,28 @@ export class EventsService implements OnModuleInit {
       outcome: null,
     };
 
-    const session = await this.connection.startSession();
     try {
-      let createdId = '';
-      await session.withTransaction(async () => {
-        const [created] = await this.events.create([document], { session });
-        createdId = created._id.toString();
-        await this.invalidateSuffix(created, session);
-      });
-      return { id: createdId, status: 'pending', duplicate: false };
+      const createdId = await this.events.insertPending(document);
+      return toAccepted({ id: createdId, status: 'pending', duplicate: false });
     } catch (error) {
-      if (isDuplicateKey(error)) {
-        const existing = await this.events.findOne({
-          idempotencyKey: document.idempotencyKey,
-        });
-        if (!existing) {
-          throw error;
-        }
-        return {
-          id: existing._id.toString(),
-          status: existing.status,
-          duplicate: true,
-        };
+      if (!isDuplicateKey(error)) {
+        throw error;
       }
-      if (isMongoUnavailable(error)) {
-        throw new ServiceUnavailableException('Event store is unavailable');
+      const existing = await this.events.findByIdempotencyKey(
+        document.idempotencyKey,
+      );
+      if (!existing) {
+        throw error;
       }
-      throw error;
-    } finally {
-      await session.endSession();
+      return toAccepted({
+        id: existing._id.toString(),
+        status: existing.status,
+        duplicate: true,
+      });
     }
   }
 
-  async getById(id: string): Promise<EventView> {
+  async getById(id: string): Promise<EventViewDto> {
     if (!mongoose.Types.ObjectId.isValid(id)) {
       throw new NotFoundException('Event not found');
     }
@@ -100,45 +72,15 @@ export class EventsService implements OnModuleInit {
     return toEventView(event);
   }
 
-  async timeline(patientId: string): Promise<{
-    patientId: string;
-    stateHash: string | null;
-    events: EventView[];
-  }> {
-    const events = await this.events
-      .find({ patientId })
-      .sort({ ts: 1, _id: 1 });
+  async timeline(patientId: string): Promise<PatientTimelineDto> {
+    const events = await this.events.findTimeline(patientId);
     const latestProcessed = [...events]
       .reverse()
       .find((event) => event.status === 'processed');
-    return {
+    return toTimeline({
       patientId,
       stateHash: latestProcessed?.outcome?.stateHash ?? null,
       events: events.map((event) => toEventView(event)),
-    };
-  }
-
-  private async invalidateSuffix(
-    created: PatientEventDocument,
-    session: mongoose.ClientSession,
-  ): Promise<void> {
-    await this.events.updateMany(
-      {
-        patientId: created.patientId,
-        _id: { $ne: created._id },
-        ts: { $gt: created.ts },
-        status: { $in: ['processed', 'processing'] },
-      },
-      {
-        $set: {
-          status: 'pending',
-          outcome: null,
-          lockToken: null,
-          lockedUntil: null,
-          processedAt: null,
-        },
-      },
-      { session },
-    );
+    });
   }
 }
