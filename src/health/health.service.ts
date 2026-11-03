@@ -1,15 +1,25 @@
-import { Injectable, ServiceUnavailableException } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { AppConfig } from '../config/app-config.module.js';
-import { EventsRepository } from '../events/events.repository.js';
-import { EventWorker } from '../events/processing/event-worker.service.js';
+import {
+  EVENT_HEALTH,
+  type EventHealth,
+} from '../events/ports/event-health.port.js';
+import {
+  WORKER_HEALTH,
+  type WorkerHealth,
+} from '../events/ports/worker-health.port.js';
 import type { HealthDto } from './health.dto.js';
 
 @Injectable()
 export class HealthService {
   constructor(
-    private readonly events: EventsRepository,
+    @Inject(EVENT_HEALTH) private readonly events: EventHealth,
     private readonly env: AppConfig,
-    private readonly worker: EventWorker,
+    @Inject(WORKER_HEALTH) private readonly worker: WorkerHealth,
   ) {}
 
   async snapshot(): Promise<HealthDto> {

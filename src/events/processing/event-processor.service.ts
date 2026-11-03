@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 import { structuredLog } from '../../common/structured-log.js';
 import { AppConfig } from '../../config/app-config.module.js';
 import { chainStateHash } from '../idempotency.js';
-import { EventsRepository } from '../events.repository.js';
+import { EVENT_EFFECT, type EventEffect } from '../ports/event-effect.port.js';
 import type { PatientEventDocument } from '../schemas/event.schema.js';
 import { EXTERNAL_SYSTEM, type ExternalSystem } from './external-system.js';
 
@@ -12,7 +12,7 @@ export class EventProcessor {
   private readonly logger = new Logger(EventProcessor.name);
 
   constructor(
-    private readonly events: EventsRepository,
+    @Inject(EVENT_EFFECT) private readonly events: EventEffect,
     private readonly env: AppConfig,
     @Inject(EXTERNAL_SYSTEM) private readonly external: ExternalSystem,
   ) {}

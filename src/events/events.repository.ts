@@ -2,40 +2,33 @@ import { Injectable, type OnModuleInit } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import mongoose from 'mongoose';
 import { isDuplicateKey } from '../common/mongo-errors.js';
+import type { EventEffect } from './ports/event-effect.port.js';
+import type {
+  BacklogSnapshot,
+  EventHealth,
+} from './ports/event-health.port.js';
+import type {
+  EventIntake,
+  PendingEventInsert,
+} from './ports/event-intake.port.js';
+import type { EventLease } from './ports/event-lease.port.js';
+import type { EventQuery } from './ports/event-query.port.js';
 import {
   PatientEvent,
   type EventOutcome,
   type PatientEventDocument,
 } from './schemas/event.schema.js';
 
-export interface PendingEventInsert {
-  patientId: string;
-  type: string;
-  data: Record<string, unknown>;
-  ts: Date;
-  idempotencyKey: string;
-  status: 'pending';
-  receivedAt: Date;
-  eligibleAt: Date;
-  attempt: number;
-  effectApplied: boolean;
-  lockToken: null;
-  lockedUntil: null;
-  lastError: null;
-  processedAt: null;
-  outcome: null;
-}
-
-export interface BacklogSnapshot {
-  pending: number;
-  processing: number;
-  processed: number;
-  failed: number;
-  oldestPendingReceivedAt: Date | null;
-}
-
 @Injectable()
-export class EventsRepository implements OnModuleInit {
+export class EventsRepository
+  implements
+    OnModuleInit,
+    EventIntake,
+    EventQuery,
+    EventLease,
+    EventEffect,
+    EventHealth
+{
   constructor(
     @InjectModel(PatientEvent.name)
     private readonly events: mongoose.Model<PatientEventDocument>,

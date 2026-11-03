@@ -1,21 +1,16 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import mongoose from 'mongoose';
+import { Inject, Injectable } from '@nestjs/common';
 import { isDuplicateKey } from '../common/mongo-errors.js';
 import { AppConfig } from '../config/app-config.module.js';
 import type { CreateEventDto } from './dto/create-event.dto.js';
-import {
-  AcceptedEventDto,
-  EventViewDto,
-  PatientTimelineDto,
-} from './dto/event-response.dto.js';
-import { toAccepted, toEventView, toTimeline } from './event.presenter.js';
+import { AcceptedEventDto } from './dto/event-response.dto.js';
+import { toAccepted } from './event.presenter.js';
 import { buildIdempotencyKey, normalizeTimestamp } from './idempotency.js';
-import { EventsRepository } from './events.repository.js';
+import { EVENT_INTAKE, type EventIntake } from './ports/event-intake.port.js';
 
 @Injectable()
-export class EventsService {
+export class AcceptEventsService {
   constructor(
-    private readonly events: EventsRepository,
+    @Inject(EVENT_INTAKE) private readonly events: EventIntake,
     private readonly env: AppConfig,
   ) {}
 
@@ -59,28 +54,5 @@ export class EventsService {
         duplicate: true,
       });
     }
-  }
-
-  async getById(id: string): Promise<EventViewDto> {
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      throw new NotFoundException('Event not found');
-    }
-    const event = await this.events.findById(id);
-    if (!event) {
-      throw new NotFoundException('Event not found');
-    }
-    return toEventView(event);
-  }
-
-  async timeline(patientId: string): Promise<PatientTimelineDto> {
-    const events = await this.events.findTimeline(patientId);
-    const latestProcessed = [...events]
-      .reverse()
-      .find((event) => event.status === 'processed');
-    return toTimeline({
-      patientId,
-      stateHash: latestProcessed?.outcome?.stateHash ?? null,
-      events: events.map((event) => toEventView(event)),
-    });
   }
 }

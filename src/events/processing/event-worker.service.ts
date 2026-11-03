@@ -1,4 +1,5 @@
 import {
+  Inject,
   Injectable,
   Logger,
   type OnModuleDestroy,
@@ -8,11 +9,14 @@ import mongoose from 'mongoose';
 import { sleep } from '../../common/sleep.js';
 import { structuredLog } from '../../common/structured-log.js';
 import { AppConfig } from '../../config/app-config.module.js';
-import { EventsRepository } from '../events.repository.js';
+import { EVENT_LEASE, type EventLease } from '../ports/event-lease.port.js';
+import type { WorkerHealth } from '../ports/worker-health.port.js';
 import { EventProcessor } from './event-processor.service.js';
 
 @Injectable()
-export class EventWorker implements OnModuleInit, OnModuleDestroy {
+export class EventWorker
+  implements OnModuleInit, OnModuleDestroy, WorkerHealth
+{
   private readonly logger = new Logger(EventWorker.name);
   private readonly inflight = new Set<Promise<void>>();
   private readonly ownedLocks = new Map<string, string>();
@@ -21,7 +25,7 @@ export class EventWorker implements OnModuleInit, OnModuleDestroy {
   private lastTickAt: Date | null = null;
 
   constructor(
-    private readonly events: EventsRepository,
+    @Inject(EVENT_LEASE) private readonly events: EventLease,
     private readonly processor: EventProcessor,
     private readonly env: AppConfig,
   ) {}
